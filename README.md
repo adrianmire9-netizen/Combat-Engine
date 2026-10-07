@@ -42,6 +42,50 @@ Renaming IDs updates references; deleting referenced content is rejected. Valida
 errors appear in the editor without discarding your edits. This is a local app,
 not a hosted or multiplayer service. The AI uses the engine's simple action chooser.
 
+## Tactical grid combat
+
+The browser demo now starts on a 10×8 tactical grid. **Encounter** includes a map
+editor: change dimensions (2–20 cells per axis), paint/erase walls, choose a unit
+in the map-tool dropdown, and click its starting tile. **Save encounter & grid**
+before testing. Unplaced units spawn automatically along opposing team edges.
+Wide grids scroll horizontally on small screens; keep open routes between teams
+when designing melee encounters.
+
+In the arena, click **Move** to highlight reachable cells, hover or focus a tile to
+preview its shortest path and stamina cost, then click to move. Choose an ability,
+click a highlighted unit on the map (or use the target dropdown), and click **Use**.
+**End turn** finishes early. **AI action** performs one attack or movement action;
+it navigates around walls toward enemies.
+
+- Movement is orthogonal. Walls and living units block paths; defeated units
+  disappear from the board and their cells can be crossed.
+- Tiles per turn = floor(base movement + speed × movement-speed scaling).
+  A character `movement` stat overrides this formula. Modifiers to that stat work
+  when the character defines it. The default is 3 + speed × 0.1.
+- In stamina-budget turns, movement also costs stamina per step (default 0.5).
+  Without stamina-budget rules, the tile allowance permits movement before the
+  usual single ability action. Movement alone does not advance cooldowns/statuses.
+- Ability range uses Manhattan distance, so diagonal neighbors are two tiles away.
+  Default ranges are enemy 1, ally 3, self 0. The sample Fireball reaches 5 tiles.
+  Ability editors expose **Range** and **Require line of sight**. Walls, including
+  walls touched at a corner, block sight. Units do not block sight.
+- Area abilities affect matching living units in range of the caster with sight,
+  rather than the entire map. There is no ground-targeted blast radius yet.
+- Map coordinates are zero-based `[x, y]`, with `(0, 0)` in the top left.
+  Invalid positions, destinations, or targets do not spend resources.
+
+Older catalogs keep their existing rules. Enable the grid in Encounter to use
+existing characters with automatic placement, or export a backup and import
+`examples/grid.json` for the complete tactical demo. `examples/guidelines.json`
+remains the stat-system demo, and `examples/catalog.json` remains the legacy demo.
+Catalog JSON export/import includes grid settings, walls, and starting positions.
+Battle progress (including moved positions) remains temporary.
+
+CLI: `python -m combat_engine --auto --data examples/grid.json --max-turns 300`.
+Manual grid CLI prompts for `x,y` movement before abilities. Python API:
+`Combatant(..., position=[1, 2])`, `battle.movement_paths(actor)`,
+`battle.move([x, y])`, and `battle.auto_action()`.
+
 ## Added stat and damage guidelines
 
 The browser demo now includes your Speed, Stamina, Species, Strength, Endurance,

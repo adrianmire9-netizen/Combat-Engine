@@ -9,6 +9,7 @@ import random
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
+from .grid import Board, distance, validate_grid
 
 
 class RulesError(ValueError):
@@ -209,6 +210,16 @@ def validate_catalog(data: dict) -> None:
                 raise RulesError("Battle roster references an unknown character")
             if not isinstance(entry.get("team"), str) or not entry["team"]:
                 raise RulesError("Battle roster needs nonempty team names")
+    try:
+        grid = validate_grid(data)
+    except ValueError as error:
+        raise RulesError(str(error)) from error
+    for key, default in (("movement_base", 3), ("movement_speed_scaling", 0.1), ("move_stamina_cost", 0.5)):
+        _number(grid.get(key, default), f"grid.{key}", 0)
+    for aid, ability in data.get("abilities", {}).items():
+        _integer(ability.get("range", 1), f"{aid}.range")
+        if not isinstance(ability.get("line_of_sight", True), bool):
+            raise RulesError(f"{aid}.line_of_sight must be a boolean")
 
 
 def load_catalog(path: str | Path) -> dict:
@@ -226,12 +237,14 @@ class StatusInstance:
 
 
 class Combatant:
-    def __init__(self, catalog: dict, character_id: str, team: str, *, name: str | None = None):
+    def __init__(self, catalog: dict, character_id: str, team: str, *, name: str | None = None, position: list | tuple | None = None):
         template = copy.deepcopy(catalog["characters"][character_id])
         self.catalog = catalog
         self.character_id = character_id
         self.name = name or template.get("name", character_id)
         self.team = team
+        self.position = position
+        self.movement_remaining = 0
         self.species = template.get("species", "")
         self.base_stats = template["stats"]
         self.base_resistances = template.get("resistances", {})
@@ -307,6 +320,12 @@ class Battle:
         self._queue: list[Combatant] = []
         self._turn_statuses: list[StatusInstance] = []
         self._turn_cooldowns: set[str] = set()
+        self.board = Board(catalog["grid"]) if catalog.get("grid", {}).get("enabled", False) else None
+        if self.board:
+            try:
+                self.board.place(self.combatants)
+            except ValueError as error:
+                raise RulesError(str(error)) from error
 
     @property
     def finished(self) -> bool:
@@ -337,6 +356,9 @@ class Battle:
                         self._effect(effect, status.source, actor, multiplier=status.stacks)
             if self.catalog.get("rules", {}).get("stamina_per_turn", False):
                 actor.resources["stamina"] = actor.stat("max_stamina")
+            if self.board:
+                config = self.catalog["grid"]
+                actor.movement_remaining = math.floor(actor.stat("movement") if "movement" in actor.base_stats or "movement" in self.catalog.get("rules", {}).get("derived_stats", {}) else config.get("movement_base", 3) + actor.stat("speed") * config.get("movement_speed_scaling", 0.1))
             stunned = any(self.catalog["statuses"][s.id].get("skip_turn", False) for s in actor.statuses.values())
             if not actor.alive or stunned or self.finished:
                 if stunned and actor.alive:
@@ -360,7 +382,7 @@ class Battle:
         for action in actions:
             aid = self.catalog["items"][action[5:]]["ability"] if action.startswith("item:") else action
             ability = self.catalog["abilities"][aid]
-            if actor.cooldowns.get(aid, 0) == 0 and all(actor.resources.get(k, 0) + 1e-9 >= v for k, v in self.action_costs(ability).items()):
+            if actor.cooldowns.get(aid, 0) == 0 and all(actor.resources.get(k, 0) + 1e-9 >= v for k, v in self.action_costs(ability).items()) and self.targets(actor, ability):
                 result.append(action)
         return result
 
@@ -369,7 +391,75 @@ class Battle:
         if mode == "self":
             return [actor] if actor.alive else []
         allies = mode in {"ally", "all_allies"}
-        return [c for c in self.combatants if c.alive and (c.team == actor.team) == allies]
+        candidates = [c for c in self.combatants if c.alive and (c.team == actor.team) == allies]
+        if self.board:
+            reach = self.ability_range(ability)
+            candidates = [c for c in candidates if distance(actor.position, c.position) <= reach
+                          and (not ability.get("line_of_sight", True) or self.board.visible(actor.position, c.position))]
+        return candidates
+
+    @staticmethod
+    def ability_range(ability: dict) -> int:
+        return ability.get("range", 0 if ability.get("target") == "self" else 3 if ability.get("target") in {"ally", "all_allies"} else 1)
+
+    def movement_paths(self, actor: Combatant) -> dict:
+        if not self.board or actor is not self.active or not actor.alive or self.finished:
+            return {}
+        paths = self.board.paths(actor.position, [c.position for c in self.combatants if c is not actor and c.alive])
+        budget = actor.movement_remaining
+        cost = self.catalog["grid"].get("move_stamina_cost", 0.5) if self.catalog.get("rules", {}).get("stamina_per_turn", False) else 0
+        if cost > 0:
+            budget = min(budget, math.floor((actor.resources.get("stamina", 0) + 1e-9) / cost))
+        return {p: path for p, path in paths.items() if 0 < len(path) <= budget}
+
+    def move(self, destination: list | tuple) -> None:
+        actor = self.active
+        if not self.board or actor is None or self.finished:
+            raise RulesError("Movement requires an active grid battle")
+        if not isinstance(destination, (list, tuple)) or len(destination) != 2 or any(type(n) is not int for n in destination):
+            raise RulesError("Choose an integer [x, y] destination")
+        path = self.movement_paths(actor).get(tuple(destination))
+        if path is None:
+            raise RulesError("Cell is blocked, occupied, or beyond your movement/stamina budget")
+        steps = len(path)
+        actor.position = tuple(destination)
+        actor.movement_remaining -= steps
+        if self.catalog.get("rules", {}).get("stamina_per_turn", False):
+            actor.resources["stamina"] = max(0, round(actor.resources.get("stamina", 0) - steps * self.catalog["grid"].get("move_stamina_cost", 0.5), 8))
+        self.log.append(f"{actor.name} moves {steps} tiles to ({destination[0]}, {destination[1]}).")
+        if not self.available_actions(actor) and not self.movement_paths(actor):
+            self._end_turn()
+
+    def auto_action(self) -> None:
+        """One AI action: attack in range, approach an enemy, use a fallback, or end."""
+        actor = self.active
+        if actor is None or self.finished:
+            raise RulesError("No active turn")
+        actions = self.available_actions(actor)
+        def definition(action):
+            aid = self.catalog["items"][action[5:]]["ability"] if action.startswith("item:") else action
+            return self.catalog["abilities"][aid]
+        attacks = [a for a in actions if not a.startswith("item:") and definition(a).get("target", "enemy") in {"enemy", "all_enemies"}]
+        if not attacks and self.board:
+            enemies = [c for c in self.combatants if c.alive and c.team != actor.team]
+            occupied = [c.position for c in self.combatants if c.alive and c is not actor]
+            routes = self.board.paths(actor.position, occupied)
+            # Pursue a reachable square adjacent to an enemy; path distance
+            # lets AI navigate walls instead of oscillating by Manhattan distance.
+            goals = [(p, path) for p, path in routes.items() if any(distance(p, e.position) == 1 for e in enemies)]
+            moves = self.movement_paths(actor)
+            if goals and moves:
+                _, route = min(goals, key=lambda pair: (len(pair[1]), pair[0]))
+                reachable = [p for p in route if p in moves]
+                if reachable:
+                    self.move(reachable[-1])
+                    return
+        if actions:
+            action = self.rng.choice(attacks or actions)
+            targets = self.targets(actor, definition(action))
+            self.act(action, targets[0] if targets else None)
+        else:
+            self.wait()
 
     def act(self, action: str, target: Combatant | None = None) -> None:
         actor = self.active
@@ -418,7 +508,7 @@ class Battle:
             self._turn_cooldowns.discard(aid)
         actor.clamp_resources()
         stunned = any(self.catalog["statuses"][s.id].get("skip_turn", False) for s in actor.statuses.values())
-        if not self.catalog.get("rules", {}).get("stamina_per_turn", False) or self.finished or not actor.alive or stunned or not self.available_actions(actor):
+        if not self.catalog.get("rules", {}).get("stamina_per_turn", False) or self.finished or not actor.alive or stunned or (not self.available_actions(actor) and not self.movement_paths(actor)):
             self._end_turn()
 
     def wait(self) -> None:

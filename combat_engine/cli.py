@@ -15,7 +15,7 @@ def main():
     args = parser.parse_args()
     catalog = load_catalog(args.data)
     roster = catalog.get("battle", [{"character": cid, "team": str(i)} for i, cid in enumerate(catalog["characters"])])
-    battle = Battle(catalog, [Combatant(catalog, entry["character"], entry["team"], name=entry.get("name")) for entry in roster], seed=args.seed)
+    battle = Battle(catalog, [Combatant(catalog, entry["character"], entry["team"], name=entry.get("name"), position=entry.get("position")) for entry in roster], seed=args.seed)
     printed = 0
 
     def show_log():
@@ -32,6 +32,21 @@ def main():
         for c in battle.combatants:
             statuses = ", ".join(f"{s.id}({s.remaining},x{s.stacks})" for s in c.statuses.values())
             print(f"  {c.name} [{c.team}] HP {c.resources['hp']:g}/{c.stat('max_hp'):g} | {statuses}")
+        automatic = args.auto or actor.team != roster[0]["team"]
+        if automatic and battle.board:
+            battle.auto_action()
+            show_log()
+            continue
+        if battle.board:
+            print(f"Position: {actor.position}; movement left: {actor.movement_remaining}")
+            move = input("Move to x,y, or press Enter for abilities > ").strip()
+            if move:
+                try:
+                    battle.move([int(n) for n in move.split(',')])
+                except (ValueError, RulesError) as error:
+                    print(error)
+                show_log()
+                continue
         actions = battle.available_actions(actor)
         if not actions:
             battle.wait()

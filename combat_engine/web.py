@@ -24,12 +24,13 @@ def snapshot(battle):
             definition = battle.catalog['abilities'][aid]
             actions.append(dict(id=action, name=definition.get('name', aid), available=action in available,
                                 cooldown=actor.cooldowns.get(aid, 0), costs=battle.action_costs(definition),
-                                target=definition.get('target', 'enemy'),
+                                target=definition.get('target', 'enemy'), range=battle.ability_range(definition), line_of_sight=definition.get('line_of_sight', True),
                                 targets=[battle.combatants.index(c) for c in battle.targets(actor, definition)]))
     return dict(round=battle.round, finished=battle.finished, winner=battle.winner,
                 stamina_per_turn=battle.catalog.get('rules', {}).get('stamina_per_turn', False),
                 active=battle.combatants.index(actor) if actor else None, actions=actions,
-                log=battle.log, combatants=[dict(name=c.name, team=c.team, alive=c.alive, species=c.species,
+                grid=None if not battle.board else dict(width=battle.board.width, height=battle.board.height, blocked=sorted(battle.board.walls), movement_remaining=actor.movement_remaining if actor else 0, move_stamina_cost=battle.catalog['grid'].get('move_stamina_cost', 0.5) if battle.catalog.get('rules', {}).get('stamina_per_turn', False) else 0, reachable=[dict(position=p, path=path, steps=len(path)) for p,path in battle.movement_paths(actor).items()] if actor else []),
+                log=battle.log, combatants=[dict(name=c.name, team=c.team, alive=c.alive, species=c.species, position=c.position, movement_remaining=c.movement_remaining,
                 initiative=c.initiative(), traits=battle.catalog.get('species', {}).get(c.species, {}).get('traits', []),
                 resources=c.resources, caps={k: c.stat('max_' + k) for k in c.resources},
                 stats={k: c.stat(k) for k in set(c.base_stats) | set(battle.catalog.get('rules', {}).get('derived_stats', {}))}, inventory=c.inventory,
@@ -81,7 +82,7 @@ class Handler(BaseHTTPRequestHandler):
                     if self.path == '/api/validate':
                         return self.reply(200, {'valid': True})
                     roster = catalog.get('battle', [])
-                    battle = Battle(catalog, [Combatant(catalog, r['character'], r['team'], name=r.get('name')) for r in roster], seed=7)
+                    battle = Battle(catalog, [Combatant(catalog, r['character'], r['team'], name=r.get('name'), position=r.get('position')) for r in roster], seed=7)
                     battle.begin_turn()
                     sid = secrets.token_urlsafe(24)
                     if len(SESSIONS) >= 100:
@@ -95,18 +96,9 @@ class Handler(BaseHTTPRequestHandler):
                     if data.get('action') == 'wait':
                         battle.wait()
                     elif data.get('action') == 'auto':
-                        actor = battle.active
-                        if not actor or battle.finished:
-                            raise RulesError('No active turn')
-                        choices = battle.available_actions(actor)
-                        attacks = [a for a in choices if not a.startswith('item:') and battle.catalog['abilities'][a].get('target', 'enemy') in ('enemy', 'all_enemies')]
-                        if choices:
-                            action = battle.rng.choice(attacks or choices)
-                            aid = battle.catalog['items'][action[5:]]['ability'] if action.startswith('item:') else action
-                            targets = battle.targets(actor, battle.catalog['abilities'][aid])
-                            battle.act(action, targets[0] if targets else None)
-                        else:
-                            battle.wait()
+                        battle.auto_action()
+                    elif data.get('action') == 'move':
+                        battle.move(data.get('destination'))
                     else:
                         index = data.get('target')
                         if index is not None and (type(index) is not int or not 0 <= index < len(battle.combatants)):

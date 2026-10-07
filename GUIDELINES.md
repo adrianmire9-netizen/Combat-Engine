@@ -58,9 +58,10 @@ budget can be edited in the UI. Precision formulas and effect chance scaling are
 available in the ability/effect editor. Derived stats must use base attributes,
 not other derived stats, to prevent cycles.
 
-Movement, detection, carrying, knockback, sprinting, and reaction attacks are
-recorded as possible design uses; this arena has no spatial or exploration
-system for them. Blocking is available through armor/resistance status effects.
+Grid movement is now implemented: speed influences the per-turn tile allowance,
+with stamina costs in stamina-budget turns. See README.md for grid rules.
+Detection, carrying, knockback, sprinting, and reaction attacks remain possible
+design uses, without exploration or reaction mechanics. Blocking is available through armor/resistance status effects.
 Create ranged damage using dexterity scaling and a pierce/ballistic damage type.
 
 Existing catalogs without new rules retain one action per turn, persistent
