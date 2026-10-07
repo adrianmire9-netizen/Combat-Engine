@@ -11,7 +11,7 @@ from combat_engine.web import Handler, SESSIONS
 class WebTests(unittest.TestCase):
     def setUp(self):
         SESSIONS.clear()
-        self.catalog = json.loads((Path(__file__).parents[1] / 'combat_engine/demo.json').read_text())
+        self.catalog = json.loads((Path(__file__).parents[1] / 'examples/catalog.json').read_text())
 
     def post(self, path, data, origin=None):
         body = json.dumps(data).encode()

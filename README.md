@@ -28,8 +28,8 @@ use `python -m combat_engine.web --port 8766` and open port 8766 instead.
 - **Statuses:** configure duration, stacking, stun, tags, modifiers, and ticking effects.
 - **Encounter:** choose character instances, names, and teams. Save the encounter
   before starting a battle. A character template can appear more than once.
-- **Battle arena:** control every team manually or click AI turn for one automated
-  turn. Select an action and target, watch resources, cooldowns, statuses, and logs.
+- **Battle arena:** control every team manually or click AI action for one automated
+  action. Select an action and target, watch resources, cooldowns, statuses, and logs.
 
 Definitions save in this browser's local storage. **Export JSON** downloads a
 portable catalog; **Import** validates and replaces your catalog. Export for
@@ -41,6 +41,31 @@ Every definition also has an advanced JSON editor for all supported fields.
 Renaming IDs updates references; deleting referenced content is rejected. Validation
 errors appear in the editor without discarding your edits. This is a local app,
 not a hosted or multiplayer service. The AI uses the engine's simple action chooser.
+
+## Added stat and damage guidelines
+
+The browser demo now includes your Speed, Stamina, Species, Strength, Endurance,
+Dexterity, Intelligence, Willpower, and Perception guidelines. Physical subtypes
+are Blunt, Slash, Pierce, and Ballistic; Elemental subtypes are Fire, Cold, Shock,
+and Acid; Exotic subtypes are Radiation and Poison.
+
+Use **Species** to create creature categories with innate stats, resistances, and
+traits. Assign a species in the character editor; equipment can restrict allowed
+species. Use **System guidelines** to read/edit the attribute reference, damage
+groups, initiative scaling, derived caps, and stamina turn rules. The ability
+editor supports accuracy/dodge scaling; effect chance can scale from caster
+attributes or be reduced by target attributes such as willpower.
+
+The new default demo refills stamina each owner turn, allowing multiple actions.
+Click **End turn** when you want to finish early, or **AI action** to automate one
+action. Cooldowns and status durations advance once per owner turn. Existing
+catalogs keep their old behavior until you enable the new rules. Browser-saved
+catalogs receive the reference definitions without overwriting their characters.
+
+To try the new presets on a saved catalog, export a backup, then import
+`examples/guidelines.json`. The legacy demo remains `examples/catalog.json`.
+See [GUIDELINES.md](GUIDELINES.md) for exact sample formulas and the distinction
+between implemented mechanics and possible secondary uses from the source.
 
 ## Terminal demo
 
@@ -85,7 +110,7 @@ Resources start full unless overridden in the character's `resources` object.
 Ability `costs` spend those resources. Resources do not regenerate automatically;
 use restore effects or a ticking status. HP is the resource that determines defeat.
 
-Equipment and statuses accept `stat_bonuses` (additive) and `stat_multipliers`
+Species, equipment, and statuses accept `stat_bonuses` (additive) and `stat_multipliers`
 (multiplicative). Bonuses apply first, then multipliers. Stats are clamped to
 zero, except max HP, which has a minimum of one. Resource caps follow modified
 stats; reducing a cap clamps the current resource and does not refund it later.
@@ -127,12 +152,12 @@ numeric coefficients rather than executable expressions. Extend effect handling
 in `engine.py` if you need new mechanics such as resurrection or summons.
 
 Damage = `max(0, amount - armor) × (1 - resistance)`, rounded to two decimals.
-Physical damage uses the target's `armor` stat by default. Other damage types
+Physical damage uses the target's `armor` stat by default. Registered physical subtypes also use armor. Other damage types
 ignore armor unless you provide an `armor_stat` (e.g. `"magic_defense"`). Set
 `armor_stat: null` to bypass armor, including for physical damage.
 
 `resistances` maps any damage type to a fraction: `0.25` reduces damage by 25%,
-`1` grants immunity, and `-0.5` increases damage by 50%. Character, equipment,
+`1` grants immunity, and `-0.5` increases damage by 50%. Character, species, equipment,
 and status resistances add together and clamp to [-1, 1]. Unknown types use zero.
 
 ### Equipment, inventory, and statuses
@@ -162,8 +187,11 @@ until the end of the caster's next turn. There is no built-in status immunity.
 
 ### Turn rules
 
-Living combatants act once per round, sorted by descending speed; equal speeds
-use roster order. Speed changes affect the next round's ordering. Start-of-turn
+Living combatants receive one turn per round. Legacy catalogs sort by descending
+speed; new catalogs use the editable initiative formula. Ties use roster order.
+Legacy turns allow one action; stamina-budget turns allow multiple affordable
+actions until ended voluntarily, no actions remain affordable, or the actor
+is defeated or stunned. Speed changes affect the next round's ordering. Start-of-turn
 status ticks happen before actions. A cooldown of N blocks the next N owner
 turns, counting skipped or waited turns. Invalid actions raise `RulesError`
 without consuming a turn or changing resources. Battle ends when at most one

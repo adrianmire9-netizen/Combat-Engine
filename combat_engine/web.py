@@ -23,14 +23,17 @@ def snapshot(battle):
             aid = battle.catalog['items'][action[5:]]['ability'] if action.startswith('item:') else action
             definition = battle.catalog['abilities'][aid]
             actions.append(dict(id=action, name=definition.get('name', aid), available=action in available,
-                                cooldown=actor.cooldowns.get(aid, 0), costs=definition.get('costs', {}),
+                                cooldown=actor.cooldowns.get(aid, 0), costs=battle.action_costs(definition),
                                 target=definition.get('target', 'enemy'),
                                 targets=[battle.combatants.index(c) for c in battle.targets(actor, definition)]))
     return dict(round=battle.round, finished=battle.finished, winner=battle.winner,
+                stamina_per_turn=battle.catalog.get('rules', {}).get('stamina_per_turn', False),
                 active=battle.combatants.index(actor) if actor else None, actions=actions,
-                log=battle.log, combatants=[dict(name=c.name, team=c.team, alive=c.alive,
+                log=battle.log, combatants=[dict(name=c.name, team=c.team, alive=c.alive, species=c.species,
+                initiative=c.initiative(), traits=battle.catalog.get('species', {}).get(c.species, {}).get('traits', []),
                 resources=c.resources, caps={k: c.stat('max_' + k) for k in c.resources},
-                stats={k: c.stat(k) for k in c.base_stats}, inventory=c.inventory,
+                stats={k: c.stat(k) for k in set(c.base_stats) | set(battle.catalog.get('rules', {}).get('derived_stats', {}))}, inventory=c.inventory,
+                resistances={k: c.resistance(k) for k in battle.catalog.get('damage_types', {})},
                 statuses=[dict(name=battle.catalog['statuses'][s.id].get('name', s.id),
                                remaining=s.remaining, stacks=s.stacks) for s in c.statuses.values()]) for c in battle.combatants])
 
