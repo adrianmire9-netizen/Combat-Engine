@@ -1,0 +1,77 @@
+{
+  "abilities": {
+    "slash": {
+      "name": "Sword Slash", "target": "enemy",
+      "effects": [{"kind": "damage", "power": 4, "scaling": {"attack": 1}, "damage_type": "physical"}]
+    },
+    "fireball": {
+      "name": "Fireball", "target": "enemy", "costs": {"mana": 6}, "cooldown": 1,
+      "effects": [
+        {"kind": "damage", "power": 8, "scaling": {"magic": 1.2}, "damage_type": "fire"},
+        {"kind": "status", "status": "burn", "chance": 0.8}
+      ]
+    },
+    "whirlwind": {
+      "name": "Whirlwind", "target": "all_enemies", "costs": {"stamina": 4}, "cooldown": 2,
+      "effects": [{"kind": "damage", "power": 2, "scaling": {"attack": 0.8}, "damage_type": "physical"}]
+    },
+    "guard": {
+      "name": "Guard", "target": "self",
+      "effects": [{"kind": "status", "status": "guarded"}]
+    },
+    "mend": {
+      "name": "Mend", "target": "ally", "costs": {"mana": 4},
+      "effects": [{"kind": "heal", "power": 12, "scaling": {"magic": 1}}]
+    },
+    "bash": {
+      "name": "Shield Bash", "target": "enemy", "costs": {"stamina": 3}, "cooldown": 2,
+      "effects": [{"kind": "damage", "power": 5, "scaling": {"attack": 0.5}}, {"kind": "status", "status": "stun"}]
+    },
+    "venom": {
+      "name": "Venom Bite", "target": "enemy",
+      "effects": [{"kind": "damage", "power": 4, "scaling": {"attack": 0.6}}, {"kind": "status", "status": "poison"}]
+    },
+    "drink_potion": {"name": "Healing Potion", "target": "ally", "effects": [{"kind": "heal", "power": 30}]},
+    "drink_ether": {"name": "Mana Ether", "target": "self", "effects": [{"kind": "restore", "resource": "mana", "power": 12}]},
+    "antidote": {"name": "Antidote", "target": "ally", "effects": [{"kind": "cleanse", "tag": "poison"}]}
+  },
+  "statuses": {
+    "burn": {"name": "Burning", "duration": 2, "tags": ["debuff"], "tick_effects": [{"kind": "damage", "power": 4, "damage_type": "fire"}]},
+    "poison": {"name": "Poisoned", "duration": 3, "stacking": "stack", "max_stacks": 3, "tags": ["debuff", "poison"], "tick_effects": [{"kind": "damage", "power": 3, "damage_type": "poison"}]},
+    "guarded": {"name": "Guarded", "duration": 1, "stat_bonuses": {"armor": 8}, "resistances": {"fire": 0.25}, "tags": ["buff"]},
+    "stun": {"name": "Stunned", "duration": 1, "skip_turn": true, "tags": ["debuff"]},
+    "haste": {"name": "Haste", "duration": 3, "stat_multipliers": {"speed": 1.5}, "tags": ["buff"]}
+  },
+  "items": {
+    "sword": {"name": "Iron Sword", "kind": "equipment", "slot": "weapon", "stat_bonuses": {"attack": 3}},
+    "mail": {"name": "Chain Mail", "kind": "equipment", "slot": "body", "stat_bonuses": {"armor": 4, "speed": -1}},
+    "fire_ring": {"name": "Fire Ward Ring", "kind": "equipment", "slot": "ring", "resistances": {"fire": 0.3}},
+    "potion": {"name": "Healing Potion", "kind": "consumable", "ability": "drink_potion"},
+    "ether": {"name": "Mana Ether", "kind": "consumable", "ability": "drink_ether"},
+    "antidote": {"name": "Antidote", "kind": "consumable", "ability": "antidote"}
+  },
+  "characters": {
+    "knight": {
+      "name": "Knight", "stats": {"max_hp": 100, "max_mana": 18, "max_stamina": 12, "attack": 12, "magic": 5, "armor": 2, "speed": 10},
+      "abilities": ["slash", "whirlwind", "bash", "guard", "mend"], "equipment": ["sword", "mail"], "inventory": {"potion": 2, "antidote": 1}
+    },
+    "mage": {
+      "name": "Mage", "stats": {"max_hp": 65, "max_mana": 30, "attack": 5, "magic": 14, "armor": 1, "speed": 12},
+      "abilities": ["slash", "fireball", "mend"], "equipment": ["fire_ring"], "inventory": {"ether": 1, "potion": 1}
+    },
+    "goblin": {
+      "name": "Goblin", "stats": {"max_hp": 55, "attack": 10, "armor": 2, "speed": 8},
+      "abilities": ["slash", "venom"], "resistances": {"fire": -0.25, "poison": 0.5}
+    },
+    "brute": {
+      "name": "Brute", "stats": {"max_hp": 100, "max_stamina": 9, "attack": 15, "armor": 5, "speed": 6},
+      "abilities": ["slash", "bash"], "resistances": {"physical": 0.1}
+    }
+  },
+  "battle": [
+    {"character": "knight", "team": "heroes"},
+    {"character": "mage", "team": "heroes"},
+    {"character": "goblin", "team": "monsters"},
+    {"character": "brute", "team": "monsters"}
+  ]
+}
